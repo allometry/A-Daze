@@ -1,10 +1,15 @@
 import java.awt.Color;
+import java.awt.Container;
+import java.awt.Dimension;
 import java.awt.Font;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.awt.Image;
+import java.awt.Point;
 import java.awt.Rectangle;
 import java.awt.RenderingHints;
+import java.awt.event.ActionEvent;
+import java.awt.event.ActionListener;
 import java.awt.geom.RoundRectangle2D;
 import java.awt.image.ImageObserver;
 import java.io.IOException;
@@ -14,6 +19,16 @@ import java.util.ArrayList;
 import java.util.Locale;
 
 import javax.imageio.ImageIO;
+import javax.swing.ButtonGroup;
+import javax.swing.JButton;
+import javax.swing.JFrame;
+import javax.swing.JLabel;
+import javax.swing.JRadioButton;
+import javax.swing.JSeparator;
+import javax.swing.SwingConstants;
+import javax.swing.WindowConstants;
+import javax.swing.event.ChangeEvent;
+import javax.swing.event.ChangeListener;
 
 import com.quirlion.script.Constants;
 import com.quirlion.script.Script;
@@ -22,12 +37,12 @@ import com.quirlion.script.types.NPC;
 
 public class ADaze extends Script {
 	private boolean isCameraRotating = false;
-	private int curseCasts = 0, monkZamorakID = 189, startingMagicLevel = 0, startingMagicXP = 0;
+	private int curseCasts = 0, monkZamorakID = 189, spellInterfaceID = 0, startingMagicLevel = 0, startingMagicXP = 0;
 	private long startTime = 0;
 	
 	private Image cursorImage, sumImage, timeImage, wandImage;
 	private ImageObserver observer;
-	private Interface enfeebleSpell = null;
+	private Interface spellInterface = null;
 	private NPC monkZamorak = null;
 	
 	@Override
@@ -40,6 +55,44 @@ public class ADaze extends Script {
 		} catch (IOException e) {
 			logStackTrace(e);
 		}
+		
+		ADazeGUI aDazeGUI = new ADazeGUI();
+		aDazeGUI.setVisible(true);
+		while(aDazeGUI.isVisible()) { wait(1); };
+		
+		switch(aDazeGUI.selectedSpell) {
+			case ADazeGUI.CONFUSE:
+				spellInterfaceID = Constants.SPELL_CONFUSE;
+			break;
+			
+			case ADazeGUI.WEAKEN:
+				spellInterfaceID = Constants.SPELL_WEAKEN;
+			break;
+			
+			case ADazeGUI.CURSE:
+				spellInterfaceID = Constants.SPELL_CURSE;
+			break;
+			
+			case ADazeGUI.VULNERABILITY:
+				spellInterfaceID = Constants.SPELL_VULNERABILITY;
+			break;
+			
+			case ADazeGUI.ENFEEBLE:
+				spellInterfaceID = Constants.SPELL_ENFEEBLE;
+			break;
+			
+			case ADazeGUI.STUN:
+				spellInterfaceID = Constants.SPELL_STUN;
+			break;
+			
+			default:
+				log("No spell selected, exiting...");
+				stopScript();
+			break;
+		}
+		
+		aDazeGUI.dispose();
+		aDazeGUI = null;
 		
 		startingMagicLevel = skills.getCurrentSkillLevel(Constants.STAT_MAGIC);
 		startingMagicXP = skills.getCurrentSkillXP(Constants.STAT_MAGIC);
@@ -62,11 +115,11 @@ public class ADaze extends Script {
 				}
 			}
 			
-			enfeebleSpell = interfaces.get(Constants.INTERFACE_TAB_MAGIC, Constants.SPELL_ENFEEBLE);
-			while(!isMouseInArea(enfeebleSpell.getArea()))
-				input.moveMouse(enfeebleSpell.getRealX() + 8, enfeebleSpell.getRealY() + 8);
+			spellInterface = interfaces.get(Constants.INTERFACE_TAB_MAGIC, spellInterfaceID);
+			while(!isMouseInArea(spellInterface.getArea()))
+				input.moveMouse(spellInterface.getRealX() + 8, spellInterface.getRealY() + 8);
 			
-			if(enfeebleSpell.click()) {
+			if(spellInterface.click()) {
 				monkZamorak.hover();
 				
 				int magicXP = skills.getCurrentSkillXP(Constants.STAT_MAGIC);
@@ -78,6 +131,10 @@ public class ADaze extends Script {
 				}
 				
 				if(magicXP != skills.getCurrentSkillXP(Constants.STAT_MAGIC)) curseCasts++;
+				
+				while(players.getCurrent().getAnimation() > 0) {
+					wait(1);
+				}
 			}
 			
 		} catch(Exception e) {
@@ -278,5 +335,172 @@ public class ADaze extends Script {
 		return (hours < 10 ? "0" + hours + ":" : hours + ":")
 				+ (minutes < 10 ? "0" + minutes + ":" : minutes + ":")
 				+ (seconds < 10 ? "0" + seconds : seconds);
+	}
+	
+	public class ADazeGUI extends JFrame {
+		private static final long serialVersionUID = 6280429693064089142L;
+		public static final int CONFUSE = 1, WEAKEN = 2, CURSE = 3, VULNERABILITY = 4, ENFEEBLE = 5, STUN = 6;
+		public int selectedSpell;
+		
+		public ADazeGUI() {
+			initComponents();
+		}
+
+		private void confuseRadioButtonStateChanged(ChangeEvent e) {
+			if(!startButton.isEnabled()) startButton.setEnabled(true);
+		}
+
+		private void weakenRadioButtonStateChanged(ChangeEvent e) {
+			if(!startButton.isEnabled()) startButton.setEnabled(true);
+		}
+
+		private void curseRadioButtonStateChanged(ChangeEvent e) {
+			if(!startButton.isEnabled()) startButton.setEnabled(true);
+		}
+
+		private void stunRadioButtonStateChanged(ChangeEvent e) {
+			if(!startButton.isEnabled()) startButton.setEnabled(true);
+		}
+
+		private void enfeebleRadioButtonStateChanged(ChangeEvent e) {
+			if(!startButton.isEnabled()) startButton.setEnabled(true);
+		}
+
+		private void vulnerabilityRadioButtonStateChanged(ChangeEvent e) {
+			if(!startButton.isEnabled()) startButton.setEnabled(true);
+		}
+
+		private void startButtonActionPerformed(ActionEvent e) {
+			if(confuseRadioButton.isSelected()) selectedSpell = CONFUSE;
+			if(weakenRadioButton.isSelected()) selectedSpell = WEAKEN;
+			if(curseRadioButton.isSelected()) selectedSpell = CURSE;
+			if(vulnerabilityRadioButton.isSelected()) selectedSpell = VULNERABILITY;
+			if(enfeebleRadioButton.isSelected()) selectedSpell = ENFEEBLE;
+			if(stunRadioButton.isSelected()) selectedSpell = STUN;
+			
+			setVisible(false);
+		}
+
+		private void initComponents() {
+			confuseRadioButton = new JRadioButton();
+			aDazeConfigurationLabel = new JLabel();
+			topSeparator = new JSeparator();
+			weakenRadioButton = new JRadioButton();
+			curseRadioButton = new JRadioButton();
+			stunRadioButton = new JRadioButton();
+			enfeebleRadioButton = new JRadioButton();
+			vulnerabilityRadioButton = new JRadioButton();
+			startButton = new JButton();
+			bottomSeparator = new JSeparator();
+
+			setDefaultCloseOperation(WindowConstants.HIDE_ON_CLOSE);
+			setResizable(false);
+			setTitle("A. Daze");
+			Container contentPane = getContentPane();
+			contentPane.setLayout(null);
+
+			confuseRadioButton.setText("Confuse (3)");
+			confuseRadioButton.addChangeListener(new ChangeListener() {
+				@Override
+				public void stateChanged(ChangeEvent e) {
+					confuseRadioButtonStateChanged(e);
+				}
+			});
+			contentPane.add(confuseRadioButton);
+			confuseRadioButton.setBounds(15, 50, 200, confuseRadioButton.getPreferredSize().height);
+
+			aDazeConfigurationLabel.setText("A. Daze Configuration");
+			aDazeConfigurationLabel.setHorizontalAlignment(SwingConstants.CENTER);
+			contentPane.add(aDazeConfigurationLabel);
+			aDazeConfigurationLabel.setBounds(15, 15, 200, aDazeConfigurationLabel.getPreferredSize().height);
+			contentPane.add(topSeparator);
+			topSeparator.setBounds(5, 35, 220, topSeparator.getPreferredSize().height);
+
+			weakenRadioButton.setText("Weaken (11)");
+			weakenRadioButton.addChangeListener(new ChangeListener() {
+				@Override
+				public void stateChanged(ChangeEvent e) {
+					weakenRadioButtonStateChanged(e);
+				}
+			});
+			contentPane.add(weakenRadioButton);
+			weakenRadioButton.setBounds(15, 75, 200, 23);
+
+			curseRadioButton.setText("Curse (19)");
+			curseRadioButton.addChangeListener(new ChangeListener() {
+				@Override
+				public void stateChanged(ChangeEvent e) {
+					curseRadioButtonStateChanged(e);
+				}
+			});
+			contentPane.add(curseRadioButton);
+			curseRadioButton.setBounds(15, 100, 200, 23);
+
+			stunRadioButton.setText("Stun (80)");
+			stunRadioButton.addChangeListener(new ChangeListener() {
+				@Override
+				public void stateChanged(ChangeEvent e) {
+					stunRadioButtonStateChanged(e);
+				}
+			});
+			contentPane.add(stunRadioButton);
+			stunRadioButton.setBounds(15, 175, 200, 23);
+
+			enfeebleRadioButton.setText("Enfeeble (73)");
+			enfeebleRadioButton.addChangeListener(new ChangeListener() {
+				@Override
+				public void stateChanged(ChangeEvent e) {
+					enfeebleRadioButtonStateChanged(e);
+				}
+			});
+			contentPane.add(enfeebleRadioButton);
+			enfeebleRadioButton.setBounds(15, 150, 200, 23);
+
+			vulnerabilityRadioButton.setText("Vulnerability (66)");
+			vulnerabilityRadioButton.addChangeListener(new ChangeListener() {
+				@Override
+				public void stateChanged(ChangeEvent e) {
+					vulnerabilityRadioButtonStateChanged(e);
+				}
+			});
+			contentPane.add(vulnerabilityRadioButton);
+			vulnerabilityRadioButton.setBounds(15, 125, 200, 23);
+
+			startButton.setText("Start");
+			startButton.setEnabled(false);
+			startButton.addActionListener(new ActionListener() {
+				@Override
+				public void actionPerformed(ActionEvent e) {
+					startButtonActionPerformed(e);
+				}
+			});
+			contentPane.add(startButton);
+			startButton.setBounds(new Rectangle(new Point(150, 215), startButton.getPreferredSize()));
+			contentPane.add(bottomSeparator);
+			bottomSeparator.setBounds(5, 200, 220, 12);
+
+			contentPane.setPreferredSize(new Dimension(230, 275));
+			setSize(230, 275);
+			setLocationRelativeTo(null);
+
+			ButtonGroup spellGroup = new ButtonGroup();
+			spellGroup.add(confuseRadioButton);
+			spellGroup.add(weakenRadioButton);
+			spellGroup.add(curseRadioButton);
+			spellGroup.add(stunRadioButton);
+			spellGroup.add(enfeebleRadioButton);
+			spellGroup.add(vulnerabilityRadioButton);
+		}
+		
+		private JRadioButton confuseRadioButton;
+		private JLabel aDazeConfigurationLabel;
+		private JSeparator topSeparator;
+		private JRadioButton weakenRadioButton;
+		private JRadioButton curseRadioButton;
+		private JRadioButton stunRadioButton;
+		private JRadioButton enfeebleRadioButton;
+		private JRadioButton vulnerabilityRadioButton;
+		private JButton startButton;
+		private JSeparator bottomSeparator;
 	}
 }
