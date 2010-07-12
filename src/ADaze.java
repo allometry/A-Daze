@@ -229,15 +229,23 @@ public class ADaze extends Script {
 					if(cam.getCameraAngle() >= 45 && cam.getCameraAngle() <= 122) {
 						//spin right
 						int randomAngle = random(122, 290) - cam.getCameraAngle();
+						
+						isCameraRotating = true;
 						while(cam.getCameraAngle() != randomAngle)
 							cam.spinCamera(1, Camera.RIGHT);
+						
+						isCameraRotating = false;
 					}
 					
 					if(cam.getCameraAngle() >= 290 && cam.getCameraAngle() <= 122) {
 						//spin left
 						int randomAngle = random(45, 122);
+						
+						isCameraRotating = true;
 						while(cam.getCameraAngle() != randomAngle)
 							cam.spinCamera(1, Camera.LEFT);
+						
+						isCameraRotating = false;
 					}
 					
 					long c1Timeout = System.currentTimeMillis() + random(30000, 60000);
