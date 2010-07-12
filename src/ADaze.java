@@ -32,18 +32,21 @@ import javax.swing.event.ChangeListener;
 
 import com.quirlion.script.Constants;
 import com.quirlion.script.Script;
+import com.quirlion.script.types.Camera;
 import com.quirlion.script.types.Interface;
 import com.quirlion.script.types.NPC;
 
 public class ADaze extends Script {
-	private boolean isCameraRotating = false;
+	private boolean isCameraRotating = false, isStopping = false;
 	private int curseCasts = 0, monkZamorakID = 189, spellInterfaceID = 0, startingMagicLevel = 0, startingMagicXP = 0;
 	private long startTime = 0;
 	
+	private Antiban antiban;
 	private Image cursorImage, sumImage, timeImage, wandImage;
 	private ImageObserver observer;
 	private Interface spellInterface = null;
 	private NPC monkZamorak = null;
+	private Thread antibanThread;
 	
 	@Override
 	public void onStart() {
@@ -94,6 +97,10 @@ public class ADaze extends Script {
 		aDazeGUI.dispose();
 		aDazeGUI = null;
 		
+		antiban = new Antiban();
+		antibanThread = new Thread(antiban);
+		antibanThread.start();
+		
 		startingMagicLevel = skills.getCurrentSkillLevel(Constants.STAT_MAGIC);
 		startingMagicXP = skills.getCurrentSkillXP(Constants.STAT_MAGIC);
 		startTime = System.currentTimeMillis();
@@ -114,6 +121,8 @@ public class ADaze extends Script {
 					stopScript();
 				}
 			}
+			
+			if(tabs.getCurrentTab() != Constants.TAB_MAGIC) tabs.openTab(Constants.TAB_MAGIC);
 			
 			spellInterface = interfaces.get(Constants.INTERFACE_TAB_MAGIC, spellInterfaceID);
 			while(!isMouseInArea(spellInterface.getArea()))
@@ -203,6 +212,49 @@ public class ADaze extends Script {
 		
 		g.setColor(new Color(0, 0, 200, 191));
 		g.fill(progressBar);
+	}
+	
+	public boolean isMouseInArea(Rectangle inArea) {
+		int x = input.getBotMousePosition().x, y = input.getBotMousePosition().y;
+		
+		return (x > inArea.getX() && x < (inArea.getX() + inArea.getWidth()) && y > inArea.getY() && y < (inArea.getY() + inArea.getHeight()));
+	}
+	
+	private class Antiban implements Runnable {
+		@Override
+		public void run() {
+			while(!isStopping) {
+				switch(random(1, 11) % 2) {
+				case 1:					
+					if(cam.getCameraAngle() >= 45 && cam.getCameraAngle() <= 122) {
+						//spin right
+						int randomAngle = random(122, 290) - cam.getCameraAngle();
+						while(cam.getCameraAngle() != randomAngle)
+							cam.spinCamera(1, Camera.RIGHT);
+					}
+					
+					if(cam.getCameraAngle() >= 290 && cam.getCameraAngle() <= 122) {
+						//spin left
+						int randomAngle = random(45, 122);
+						while(cam.getCameraAngle() != randomAngle)
+							cam.spinCamera(1, Camera.LEFT);
+					}
+					
+					long c1Timeout = System.currentTimeMillis() + random(30000, 60000);
+					while(System.currentTimeMillis() < c1Timeout && !isStopping) {}
+					
+					break;
+
+				default:					
+					long c2Timeout = System.currentTimeMillis() + random(30000, 60000);
+					while(System.currentTimeMillis() < c2Timeout && !isStopping) {}
+					
+					break;
+				}
+			}
+			
+			log("Antiban: Shutting down...");
+		}
 	}
 	
 	public class Scoreboard {
@@ -311,30 +363,6 @@ public class ADaze extends Script {
 			g.drawImage(widgetImage, x, y, observer);
 			g.drawString(widgetText, x + widgetImage.getWidth(observer) + 4, y + 12);
 		}
-	}
-	
-	public boolean isMouseInArea(Rectangle inArea) {
-		int x = input.getBotMousePosition().x, y = input.getBotMousePosition().y;
-		
-		return (x > inArea.getX() && x < (inArea.getX() + inArea.getWidth()) && y > inArea.getY() && y < (inArea.getY() + inArea.getHeight()));
-	}
-	
-	private String millisToClock(long milliseconds) {
-		long seconds = (milliseconds / 1000), minutes = 0, hours = 0;
-		
-		if (seconds >= 60) {
-			minutes = (seconds / 60);
-			seconds -= (minutes * 60);
-		}
-		
-		if (minutes >= 60) {
-			hours = (minutes / 60);
-			minutes -= (hours * 60);
-		}
-		
-		return (hours < 10 ? "0" + hours + ":" : hours + ":")
-				+ (minutes < 10 ? "0" + minutes + ":" : minutes + ":")
-				+ (seconds < 10 ? "0" + seconds : seconds);
 	}
 	
 	public class ADazeGUI extends JFrame {
@@ -502,5 +530,23 @@ public class ADaze extends Script {
 		private JRadioButton vulnerabilityRadioButton;
 		private JButton startButton;
 		private JSeparator bottomSeparator;
+	}
+	
+	private String millisToClock(long milliseconds) {
+		long seconds = (milliseconds / 1000), minutes = 0, hours = 0;
+		
+		if (seconds >= 60) {
+			minutes = (seconds / 60);
+			seconds -= (minutes * 60);
+		}
+		
+		if (minutes >= 60) {
+			hours = (minutes / 60);
+			minutes -= (hours * 60);
+		}
+		
+		return (hours < 10 ? "0" + hours + ":" : hours + ":")
+				+ (minutes < 10 ? "0" + minutes + ":" : minutes + ":")
+				+ (seconds < 10 ? "0" + seconds : seconds);
 	}
 }
