@@ -25,8 +25,11 @@ import javax.swing.JCheckBox;
 import javax.swing.JComboBox;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
+import javax.swing.JList;
 import javax.swing.JRadioButton;
+import javax.swing.JScrollPane;
 import javax.swing.JSeparator;
+import javax.swing.ListSelectionModel;
 import javax.swing.SwingConstants;
 import javax.swing.WindowConstants;
 import javax.swing.event.ChangeEvent;
@@ -34,27 +37,26 @@ import javax.swing.event.ChangeListener;
 
 import com.quirlion.script.Constants;
 import com.quirlion.script.Script;
-import com.quirlion.script.types.Camera;
 import com.quirlion.script.types.Interface;
 import com.quirlion.script.types.InventoryItem;
+import com.quirlion.script.types.Magic;
 import com.quirlion.script.types.NPC;
 
 public class ADaze extends Script {
-	private boolean isUsingAlchemy = false, isCameraRotating = false, isStopping = false;
-	private int curseCasts = 0, monkZamorakID = 189, spellInterfaceID = 0, startingMagicLevel = 0, startingMagicXP = 0;
+	private boolean isUsingAlchemy = false, isUsingHighAlchemy = false, isUsingLowAlchemy = false, isCameraRotating = false;
+	private int alchemyCasts = 0, curseCasts = 0, curseNPCID = 0, spellInterfaceID = 0, startingMagicLevel = 0, startingMagicXP = 0;
 	private long startTime = 0, timeout = 0;
 	
-	//private Antiban antiban;
 	private InventoryItem alchemyInventoryItem;
-	private Image cursorImage, sumImage, timeImage, wandImage;
+	private Image asteriskImage, cursorImage, sumImage, timeImage, wandImage;
 	private ImageObserver observer;
-	private Interface highAlchemyInterface = null, spellInterface = null;
-	private NPC monkZamorak = null;
-	//private Thread antibanThread;
+	private Interface spellInterface = null;
+	private NPC curseNPC = null;
 	
 	@Override
 	public void onStart() {
 		try {
+			asteriskImage = ImageIO.read(new URL("http://scripts.allometry.com/icons/asterisk_orange.png"));
 			cursorImage = ImageIO.read(new URL("http://scripts.allometry.com/app/webroot/img/cursors/cursor-01.png"));
 			sumImage = ImageIO.read(new URL("http://scripts.allometry.com/icons/sum.png"));
 			timeImage = ImageIO.read(new URL("http://scripts.allometry.com/icons/time.png"));
@@ -66,47 +68,33 @@ public class ADaze extends Script {
 		startingMagicLevel = skills.getCurrentSkillLevel(Constants.STAT_MAGIC);
 		startingMagicXP = skills.getCurrentSkillXP(Constants.STAT_MAGIC);
 		
-		ADazeGUI aDazeGUI = new ADazeGUI();
+		ArrayList<Monster> monsters = new ArrayList<Monster>();
+		for(NPC npc : npcs.getArray())
+			if(npc.getName() != "" || !npc.getName().contains("null"))
+				monsters.add(new Monster(npc));
+		
+		ADazeGUI aDazeGUI = new ADazeGUI(monsters.toArray());
 		
 		if(startingMagicLevel < 3) {
 			log("You do not have a magic skill level of 3 or greater. You can't use this script yet! Exiting...");
 			stopScript();
 		}
 		
-		if(startingMagicLevel < 11) {
-			aDazeGUI.weakenRadioButton.setEnabled(false);
-			aDazeGUI.curseRadioButton.setEnabled(false);
-			aDazeGUI.vulnerabilityRadioButton.setEnabled(false);
-			aDazeGUI.enfeebleRadioButton.setEnabled(false);
-			aDazeGUI.stunRadioButton.setEnabled(false);
+		if(startingMagicLevel >= 3) aDazeGUI.confuseRadioButton.setEnabled(true);
+		if(startingMagicLevel >= 11) aDazeGUI.weakenRadioButton.setEnabled(true);
+		
+		if(startingMagicLevel >= 19) {
+			aDazeGUI.curseRadioButton.setEnabled(true);
+			aDazeGUI.lowAlchemyCheckBox.setEnabled(true);
 		}
 		
-		if(startingMagicLevel < 19) {
-			aDazeGUI.curseRadioButton.setEnabled(false);
-			aDazeGUI.vulnerabilityRadioButton.setEnabled(false);
-			aDazeGUI.enfeebleRadioButton.setEnabled(false);
-			aDazeGUI.stunRadioButton.setEnabled(false);
-		}
+		if(startingMagicLevel >= 55) aDazeGUI.highAlchemyCheckBox.setEnabled(true);
+		if(startingMagicLevel >= 66) aDazeGUI.vulnerabilityRadioButton.setEnabled(true);
+		if(startingMagicLevel >= 73) aDazeGUI.enfeebleRadioButton.setEnabled(true);
+		if(startingMagicLevel >= 80) aDazeGUI.stunRadioButton.setEnabled(true);
 		
-		if(startingMagicLevel < 66) {
-			aDazeGUI.vulnerabilityRadioButton.setEnabled(false);
-			aDazeGUI.enfeebleRadioButton.setEnabled(false);
-			aDazeGUI.stunRadioButton.setEnabled(false);
-		}
-		
-		if(startingMagicLevel < 73) {
-			aDazeGUI.enfeebleRadioButton.setEnabled(false);
-			aDazeGUI.stunRadioButton.setEnabled(false);
-		}
-		
-		if(startingMagicLevel < 80) {
-			aDazeGUI.stunRadioButton.setEnabled(false);
-		}
-		
-		aDazeGUI.inventoryItemsComboxBox.setEnabled(false);
-		for(InventoryItem item : inventory.getItemArray()) {
-			aDazeGUI.inventoryItemsComboxBox.addItem(new Item(item));
-		}
+		for(InventoryItem item : inventory.getItemArray())
+			aDazeGUI.inventoryComboBox.addItem(new Item(item));
 		
 		aDazeGUI.setVisible(true);
 		while(aDazeGUI.isVisible()) { wait(1); };
@@ -142,17 +130,22 @@ public class ADaze extends Script {
 			break;
 		}
 		
-		if(aDazeGUI.alchemyCheckBox.isSelected()) {
+		if(aDazeGUI.lowAlchemyCheckBox.isSelected()) {
 			isUsingAlchemy = true;
-			alchemyInventoryItem = ((Item)aDazeGUI.inventoryItemsComboxBox.getSelectedItem()).getInventoryItem();
+			isUsingLowAlchemy = true;
+			alchemyInventoryItem = ((Item)aDazeGUI.inventoryComboBox.getSelectedItem()).getInventoryItem();
 		}
 		
+		if(aDazeGUI.highAlchemyCheckBox.isSelected()) {
+			isUsingAlchemy = true;
+			isUsingHighAlchemy = true;
+			alchemyInventoryItem = ((Item)aDazeGUI.inventoryComboBox.getSelectedItem()).getInventoryItem();
+		}
+		
+		curseNPCID = ((Monster)aDazeGUI.monsterList.getSelectedValue()).getMonster().getID();
+
 		aDazeGUI.dispose();
 		aDazeGUI = null;
-		
-		//antiban = new Antiban();
-		//antibanThread = new Thread(antiban);
-		//antibanThread.start();
 		
 		startTime = System.currentTimeMillis();
 	}
@@ -162,64 +155,60 @@ public class ADaze extends Script {
 		if(isCameraRotating) return 1;
 		
 		try {
-			if(monkZamorak == null) {
-				if(npcs.getNearestByID(monkZamorakID) != null) {
-					monkZamorak = npcs.getNearestByID(monkZamorakID);
+			if(curseNPC == null) {
+				if(npcs.getNearestByID(curseNPCID) != null) {
+					curseNPC = npcs.getNearestByID(curseNPCID);
 					
 					return 1;
 				} else {
-					log("Could not find Monk, stopping script...");
+					log("Could not find monster, stopping script...");
 					stopScript();
 				}
 			}
 			
 			if(tabs.getCurrentTab() != Constants.TAB_MAGIC) tabs.openTab(Constants.TAB_MAGIC);
 			
-			highAlchemyInterface = interfaces.get(Constants.INTERFACE_TAB_MAGIC, Constants.SPELL_HIGH_LEVEL_ALCHEMY);
 			spellInterface = interfaces.get(Constants.INTERFACE_TAB_MAGIC, spellInterfaceID);
 			
 			while(!isMouseInArea(spellInterface.getArea()))
 				input.moveMouse(spellInterface.getRealX() + 8, spellInterface.getRealY() + 8);
 			
 			if(spellInterface.click()) {
-				monkZamorak.hover();
+				Point npcLocation = calculations.tileToScreen(curseNPC.getLocation());
 				
-				int magicXP = skills.getCurrentSkillXP(Constants.STAT_MAGIC);
+				while(input.getBotMousePosition().equals(npcLocation)) {
+					input.hopMouse(npcLocation.x, npcLocation.y);
+					npcLocation = calculations.tileToScreen(curseNPC.getLocation());
+				}
 				
-				if(monkZamorak.click()) {
-					if(isUsingAlchemy) {
-						//TODO: Add in check to make sure stack sizes are lareg enough to cast high alch.
-						
-						while(!isMouseInArea(highAlchemyInterface.getArea()))
-							input.moveMouse(highAlchemyInterface.getRealX() + 8, highAlchemyInterface.getRealY() + 8);
-						
-						while(tabs.getCurrentTab() != Constants.TAB_INVENTORY)
-							highAlchemyInterface.click();
-						
-						int x = inventory.findItem(alchemyInventoryItem.getID()).getLocation().x;
-						int y = inventory.findItem(alchemyInventoryItem.getID()).getLocation().y;
-						Rectangle item = new Rectangle(x, y, 16, 16);
-						
-						while(!isMouseInArea(item))
-							input.moveMouse(x + 8, y + 8);
-						
-						while(tabs.getCurrentTab() != Constants.TAB_MAGIC) {
-							if(inventory.findItem(alchemyInventoryItem.getID()).click()) break;
-							wait(1000);
+				if(curseNPC.click()) {
+					timeout = System.currentTimeMillis() + 3000;
+					int magicXP = skills.getCurrentSkillXP(Constants.STAT_MAGIC);
+					while(magicXP == skills.getCurrentSkillXP(Constants.STAT_MAGIC) && System.currentTimeMillis() < timeout) wait(1);
+					if(magicXP != skills.getCurrentSkillXP(Constants.STAT_MAGIC)) curseCasts++;
+				}
+
+				if(isUsingHighAlchemy || isUsingLowAlchemy) {
+					Magic.Spell alchemySpell;
+					
+					if(isUsingHighAlchemy)
+						alchemySpell= magic.REGULAR.HIGH_LEVEL_ALCHEMY;
+					else
+						alchemySpell = magic.REGULAR.LOW_LEVEL_ALCHEMY;
+					
+					if(alchemySpell.canCast()) {
+						if(alchemySpell.castOn(alchemyInventoryItem.getID())) {
+							timeout = System.currentTimeMillis() + 3000;
+							int magicXP = skills.getCurrentSkillXP(Constants.STAT_MAGIC);
+							while(magicXP == skills.getCurrentSkillXP(Constants.STAT_MAGIC) && System.currentTimeMillis() < timeout) wait(1);
+							if(magicXP != skills.getCurrentSkillXP(Constants.STAT_MAGIC)) alchemyCasts++;
 						}
 					} else {
-						timeout = System.currentTimeMillis() + 3000;
-						while(magicXP == skills.getCurrentSkillXP(Constants.STAT_MAGIC) && System.currentTimeMillis() < timeout) wait(1);
+						isUsingHighAlchemy = false;
+						isUsingLowAlchemy = false;
 					}
 				}
-				
-				if(magicXP != skills.getCurrentSkillXP(Constants.STAT_MAGIC)) curseCasts++;
-				
-				while(players.getCurrent().getAnimation() > 0) {
-					wait(1);
-				}
 			}
-			
 		} catch(Exception e) {
 			logStackTrace(e);
 			stopScript();
@@ -251,6 +240,9 @@ public class ADaze extends Script {
 		Scoreboard rightScoreboard = new Scoreboard(Scoreboard.TOP_RIGHT, 128, 5);
 		
 		leftScoreboard.addWidget(new ScoreboardWidget(wandImage, number.format(curseCasts)));
+		
+		if(isUsingAlchemy)
+			leftScoreboard.addWidget(new ScoreboardWidget(asteriskImage, number.format(alchemyCasts)));
 		
 		rightScoreboard.addWidget(new ScoreboardWidget(timeImage, millisToClock(System.currentTimeMillis() - startTime)));
 		
@@ -294,51 +286,6 @@ public class ADaze extends Script {
 		return (x > inArea.getX() && x < (inArea.getX() + inArea.getWidth()) && y > inArea.getY() && y < (inArea.getY() + inArea.getHeight()));
 	}
 	
-	private class Antiban implements Runnable {
-		@Override
-		public void run() {
-			while(!isStopping) {
-				switch(random(1, 11) % 2) {
-				case 1:					
-					if(cam.getCameraAngle() >= 45 && cam.getCameraAngle() <= 122) {
-						//spin right
-						int randomAngle = random(122, 290) - cam.getCameraAngle();
-						int deltaAngle = cam.getCameraAngle() - randomAngle;
-						
-						isCameraRotating = true;
-						cam.spinCamera(deltaAngle, Camera.LEFT);
-						
-						isCameraRotating = false;
-					}
-					
-					if(cam.getCameraAngle() >= 290 && cam.getCameraAngle() <= 122) {
-						//spin left
-						int randomAngle = random(45, 122);
-						int deltaAngle = cam.getCameraAngle() - randomAngle;
-						
-						isCameraRotating = true;
-						cam.spinCamera(deltaAngle, Camera.RIGHT);
-						
-						isCameraRotating = false;
-					}
-					
-					long c1Timeout = System.currentTimeMillis() + random(30000, 60000);
-					while(System.currentTimeMillis() < c1Timeout && !isStopping) {}
-					
-					break;
-
-				default:					
-					long c2Timeout = System.currentTimeMillis() + random(30000, 60000);
-					while(System.currentTimeMillis() < c2Timeout && !isStopping) {}
-					
-					break;
-				}
-			}
-			
-			log("Antiban: Shutting down...");
-		}
-	}
-	
 	public class Item {
 		private InventoryItem inventoryItem;
 		
@@ -352,6 +299,22 @@ public class ADaze extends Script {
 		
 		public String toString() {
 			return inventoryItem.getName().replaceAll("<(.|\n)*?>", "");
+		}
+	}
+	
+	public class Monster {
+		private NPC monsterNPC;
+		
+		public Monster(NPC monsterNPC) {
+			this.monsterNPC = monsterNPC;
+		}
+		
+		public NPC getMonster() {
+			return monsterNPC;
+		}
+		
+		public String toString() {
+			return monsterNPC.getName();
 		}
 	}
 	
@@ -465,71 +428,97 @@ public class ADaze extends Script {
 	
 	public class ADazeGUI extends JFrame {
 		public static final int CONFUSE = 1, WEAKEN = 2, CURSE = 3, VULNERABILITY = 4, ENFEEBLE = 5, STUN = 6;
-		public int selectedSpell;
+		public int selectedSpell = 0;
 		
 		private static final long serialVersionUID = 6280429693064089142L;
 		
-		public ADazeGUI() {
-			initComponents();
-		}
-
-		private void confuseRadioButtonStateChanged(ChangeEvent e) {
-			if(!startButton.isEnabled()) startButton.setEnabled(true);
-		}
-
-		private void weakenRadioButtonStateChanged(ChangeEvent e) {
-			if(!startButton.isEnabled()) startButton.setEnabled(true);
-		}
-
-		private void curseRadioButtonStateChanged(ChangeEvent e) {
-			if(!startButton.isEnabled()) startButton.setEnabled(true);
+		public ADazeGUI(Object[] monsterObjects) {
+			initComponents(monsterObjects);
 		}
 		
-		private void vulnerabilityRadioButtonStateChanged(ChangeEvent e) {
-			if(!startButton.isEnabled()) startButton.setEnabled(true);
-		}
-
-		private void enfeebleRadioButtonStateChanged(ChangeEvent e) {
-			if(!startButton.isEnabled()) startButton.setEnabled(true);
-		}
-		
-		private void stunRadioButtonStateChanged(ChangeEvent e) {
-			if(!startButton.isEnabled()) startButton.setEnabled(true);
-		}
-		
-		private void alchemyCheckBoxStateChanged(ChangeEvent e) {
-			if(alchemyCheckBox.isSelected())
-				inventoryItemsComboxBox.setEnabled(true);
-			else
-				inventoryItemsComboxBox.setEnabled(false);
-		}
-
-		private void startButtonActionPerformed(ActionEvent e) {
+		private void updateBeans() {
 			if(confuseRadioButton.isSelected()) selectedSpell = CONFUSE;
 			if(weakenRadioButton.isSelected()) selectedSpell = WEAKEN;
 			if(curseRadioButton.isSelected()) selectedSpell = CURSE;
-			if(stunRadioButton.isSelected()) selectedSpell = STUN;
-			if(enfeebleRadioButton.isSelected()) selectedSpell = ENFEEBLE;
 			if(vulnerabilityRadioButton.isSelected()) selectedSpell = VULNERABILITY;
+			if(enfeebleRadioButton.isSelected()) selectedSpell = ENFEEBLE;
+			if(stunRadioButton.isSelected()) selectedSpell = STUN;
 			
-			setVisible(false);
+			if(selectedSpell > 0) {
+				monsterList.setEnabled(true);
+				startButton.setEnabled(true);
+			}
+			
+			if(lowAlchemyCheckBox.isSelected() || highAlchemyCheckBox.isSelected())
+				inventoryComboBox.setEnabled(true);
+			else
+				inventoryComboBox.setEnabled(false);
 		}
 
-		private void initComponents() {
+		private void confuseRadioButtonStateChanged(ChangeEvent e) {
+			updateBeans();
+		}
+
+		private void weakenRadioButtonStateChanged(ChangeEvent e) {
+			updateBeans();
+		}
+
+		private void curseRadioButtonStateChanged(ChangeEvent e) {
+			updateBeans();
+		}
+
+		private void vulnerabilityRadioButtonStateChanged(ChangeEvent e) {
+			updateBeans();
+		}
+
+		private void enfeebleRadioButtonStateChanged(ChangeEvent e) {
+			updateBeans();
+		}
+
+		private void stunRadioButtonStateChanged(ChangeEvent e) {
+			updateBeans();
+		}
+
+		private void noAlchemyCheckBoxStateChanged(ChangeEvent e) {
+			updateBeans();
+		}
+
+		private void lowAlchemyCheckBoxStateChanged(ChangeEvent e) {
+			updateBeans();
+		}
+
+		private void highAlchemyCheckBoxStateChanged(ChangeEvent e) {
+			updateBeans();
+		}
+
+		private void startButtonActionPerformed(ActionEvent e) {
+			this.setVisible(false);
+		}
+
+		private void initComponents(Object[] objects) {
 			aDazeConfigurationLabel = new JLabel();
 			topSeparator = new JSeparator();
+			curseSpellLabel = new JLabel();
 			confuseRadioButton = new JRadioButton();
 			weakenRadioButton = new JRadioButton();
 			curseRadioButton = new JRadioButton();
 			vulnerabilityRadioButton = new JRadioButton();
 			enfeebleRadioButton = new JRadioButton();
 			stunRadioButton = new JRadioButton();
-			middleSeparator = new JSeparator();
-			alchemyCheckBox = new JCheckBox();
-			inventoryItemsComboxBox = new JComboBox();
+			topMiddleSeparator = new JSeparator();
+			monsterLabel = new JLabel();
+			monsterScrollPane = new JScrollPane();
+			monsterList = new JList(objects);
+			bottomMiddleSeparator = new JSeparator();
+			alchemySpellLabel = new JLabel();
+			noAlchemyCheckBox = new JCheckBox();
+			lowAlchemyCheckBox = new JCheckBox();
+			highAlchemyCheckBox = new JCheckBox();
+			inventoryLabel = new JLabel();
+			inventoryComboBox = new JComboBox();
 			bottomSeparator = new JSeparator();
 			startButton = new JButton();
-			
+
 			setDefaultCloseOperation(WindowConstants.HIDE_ON_CLOSE);
 			setResizable(false);
 			setTitle("A. Daze");
@@ -538,14 +527,17 @@ public class ADaze extends Script {
 
 			aDazeConfigurationLabel.setText("A. Daze Configuration");
 			aDazeConfigurationLabel.setHorizontalAlignment(SwingConstants.CENTER);
-			
 			contentPane.add(aDazeConfigurationLabel);
 			aDazeConfigurationLabel.setBounds(15, 15, 200, aDazeConfigurationLabel.getPreferredSize().height);
-			
 			contentPane.add(topSeparator);
 			topSeparator.setBounds(5, 35, 220, topSeparator.getPreferredSize().height);
-			
+
+			curseSpellLabel.setText("Select a Curse Spell...");
+			contentPane.add(curseSpellLabel);
+			curseSpellLabel.setBounds(15, 50, 200, curseSpellLabel.getPreferredSize().height);
+
 			confuseRadioButton.setText("Confuse (3)");
+			confuseRadioButton.setEnabled(false);
 			confuseRadioButton.addChangeListener(new ChangeListener() {
 				@Override
 				public void stateChanged(ChangeEvent e) {
@@ -553,9 +545,10 @@ public class ADaze extends Script {
 				}
 			});
 			contentPane.add(confuseRadioButton);
-			confuseRadioButton.setBounds(15, 50, 200, confuseRadioButton.getPreferredSize().height);
+			confuseRadioButton.setBounds(15, 75, 200, confuseRadioButton.getPreferredSize().height);
 
 			weakenRadioButton.setText("Weaken (11)");
+			weakenRadioButton.setEnabled(false);
 			weakenRadioButton.addChangeListener(new ChangeListener() {
 				@Override
 				public void stateChanged(ChangeEvent e) {
@@ -563,9 +556,10 @@ public class ADaze extends Script {
 				}
 			});
 			contentPane.add(weakenRadioButton);
-			weakenRadioButton.setBounds(15, 75, 200, 23);
+			weakenRadioButton.setBounds(15, 100, 200, 23);
 
 			curseRadioButton.setText("Curse (19)");
+			curseRadioButton.setEnabled(false);
 			curseRadioButton.addChangeListener(new ChangeListener() {
 				@Override
 				public void stateChanged(ChangeEvent e) {
@@ -573,9 +567,10 @@ public class ADaze extends Script {
 				}
 			});
 			contentPane.add(curseRadioButton);
-			curseRadioButton.setBounds(15, 100, 200, 23);
+			curseRadioButton.setBounds(15, 125, 200, 23);
 
 			vulnerabilityRadioButton.setText("Vulnerability (66)");
+			vulnerabilityRadioButton.setEnabled(false);
 			vulnerabilityRadioButton.addChangeListener(new ChangeListener() {
 				@Override
 				public void stateChanged(ChangeEvent e) {
@@ -583,9 +578,10 @@ public class ADaze extends Script {
 				}
 			});
 			contentPane.add(vulnerabilityRadioButton);
-			vulnerabilityRadioButton.setBounds(15, 125, 200, 23);
+			vulnerabilityRadioButton.setBounds(15, 150, 200, 23);
 
 			enfeebleRadioButton.setText("Enfeeble (73)");
+			enfeebleRadioButton.setEnabled(false);
 			enfeebleRadioButton.addChangeListener(new ChangeListener() {
 				@Override
 				public void stateChanged(ChangeEvent e) {
@@ -593,9 +589,10 @@ public class ADaze extends Script {
 				}
 			});
 			contentPane.add(enfeebleRadioButton);
-			enfeebleRadioButton.setBounds(15, 150, 200, 23);
-			
+			enfeebleRadioButton.setBounds(15, 175, 200, 23);
+
 			stunRadioButton.setText("Stun (80)");
+			stunRadioButton.setEnabled(false);
 			stunRadioButton.addChangeListener(new ChangeListener() {
 				@Override
 				public void stateChanged(ChangeEvent e) {
@@ -603,27 +600,71 @@ public class ADaze extends Script {
 				}
 			});
 			contentPane.add(stunRadioButton);
-			stunRadioButton.setBounds(15, 175, 200, 23);
-			
-			contentPane.add(middleSeparator);
-			middleSeparator.setBounds(5, 195, 220, 12);
-			
-			alchemyCheckBox.setText("Use High Alchemy");
-			alchemyCheckBox.setSelected(false);
-			alchemyCheckBox.addChangeListener(new ChangeListener() {
+			stunRadioButton.setBounds(15, 200, 200, 23);
+			contentPane.add(topMiddleSeparator);
+			topMiddleSeparator.setBounds(5, 225, 220, 12);
+
+			monsterLabel.setText("Select a Nearby Monster...");
+			contentPane.add(monsterLabel);
+			monsterLabel.setBounds(15, 240, 200, 16);
+			{
+				monsterList.setEnabled(false);
+				monsterList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+				monsterScrollPane.setViewportView(monsterList);
+			}
+			contentPane.add(monsterScrollPane);
+			monsterScrollPane.setBounds(15, 265, 200, 55);
+			contentPane.add(bottomMiddleSeparator);
+			bottomMiddleSeparator.setBounds(5, 325, 220, 12);
+
+			alchemySpellLabel.setText("Select Alchemy Bonus...");
+			contentPane.add(alchemySpellLabel);
+			alchemySpellLabel.setBounds(15, 340, 200, 16);
+
+			noAlchemyCheckBox.setText("No Alchemy Bonus");
+			noAlchemyCheckBox.setSelectedIcon(null);
+			noAlchemyCheckBox.setSelected(true);
+			noAlchemyCheckBox.addChangeListener(new ChangeListener() {
 				@Override
 				public void stateChanged(ChangeEvent e) {
-					alchemyCheckBoxStateChanged(e);
+					noAlchemyCheckBoxStateChanged(e);
 				}
 			});
-			contentPane.add(alchemyCheckBox);
-			alchemyCheckBox.setBounds(new Rectangle(15, 220, 200, 23));
-			
-			contentPane.add(inventoryItemsComboxBox);
-			inventoryItemsComboxBox.setBounds(new Rectangle(15, 245, 200, 23));
-			
+			contentPane.add(noAlchemyCheckBox);
+			noAlchemyCheckBox.setBounds(15, 365, 200, 23);
+
+			lowAlchemyCheckBox.setText("Use Low Alchemy (19)");
+			lowAlchemyCheckBox.setSelectedIcon(null);
+			lowAlchemyCheckBox.setEnabled(false);
+			lowAlchemyCheckBox.addChangeListener(new ChangeListener() {
+				@Override
+				public void stateChanged(ChangeEvent e) {
+					lowAlchemyCheckBoxStateChanged(e);
+				}
+			});
+			contentPane.add(lowAlchemyCheckBox);
+			lowAlchemyCheckBox.setBounds(15, 390, 200, 23);
+
+			highAlchemyCheckBox.setText("Use High Alchemy (55)");
+			highAlchemyCheckBox.setEnabled(false);
+			highAlchemyCheckBox.addChangeListener(new ChangeListener() {
+				@Override
+				public void stateChanged(ChangeEvent e) {
+					highAlchemyCheckBoxStateChanged(e);
+				}
+			});
+			contentPane.add(highAlchemyCheckBox);
+			highAlchemyCheckBox.setBounds(15, 415, 200, highAlchemyCheckBox.getPreferredSize().height);
+
+			inventoryLabel.setText("Select an Inventory Item...");
+			contentPane.add(inventoryLabel);
+			inventoryLabel.setBounds(15, 445, 200, 16);
+
+			inventoryComboBox.setEnabled(false);
+			contentPane.add(inventoryComboBox);
+			inventoryComboBox.setBounds(15, 470, 200, inventoryComboBox.getPreferredSize().height);
 			contentPane.add(bottomSeparator);
-			bottomSeparator.setBounds(5, 265, 220, 12);
+			bottomSeparator.setBounds(5, 500, 220, 12);
 
 			startButton.setText("Start");
 			startButton.setEnabled(false);
@@ -634,32 +675,46 @@ public class ADaze extends Script {
 				}
 			});
 			contentPane.add(startButton);
-			startButton.setBounds(new Rectangle(new Point(150, 285), startButton.getPreferredSize()));
+			startButton.setBounds(new Rectangle(new Point(150, 515), startButton.getPreferredSize()));
 
-			contentPane.setPreferredSize(new Dimension(230, 345));
-			setSize(230, 345);
+			contentPane.setPreferredSize(new Dimension(230, 570));
+			setSize(230, 570);
 			setLocationRelativeTo(null);
 
-			ButtonGroup spellGroup = new ButtonGroup();
-			spellGroup.add(confuseRadioButton);
-			spellGroup.add(weakenRadioButton);
-			spellGroup.add(curseRadioButton);
-			spellGroup.add(vulnerabilityRadioButton);
-			spellGroup.add(enfeebleRadioButton);
-			spellGroup.add(stunRadioButton);
+			ButtonGroup curseSpellGroup = new ButtonGroup();
+			curseSpellGroup.add(confuseRadioButton);
+			curseSpellGroup.add(weakenRadioButton);
+			curseSpellGroup.add(curseRadioButton);
+			curseSpellGroup.add(vulnerabilityRadioButton);
+			curseSpellGroup.add(enfeebleRadioButton);
+			curseSpellGroup.add(stunRadioButton);
+
+			ButtonGroup alchemySpellGroup = new ButtonGroup();
+			alchemySpellGroup.add(noAlchemyCheckBox);
+			alchemySpellGroup.add(lowAlchemyCheckBox);
+			alchemySpellGroup.add(highAlchemyCheckBox);
 		}
-		
+
 		private JLabel aDazeConfigurationLabel;
 		private JSeparator topSeparator;
+		private JLabel curseSpellLabel;
 		private JRadioButton confuseRadioButton;
 		private JRadioButton weakenRadioButton;
 		private JRadioButton curseRadioButton;
 		private JRadioButton vulnerabilityRadioButton;
 		private JRadioButton enfeebleRadioButton;
 		private JRadioButton stunRadioButton;
-		private JSeparator middleSeparator;
-		private JCheckBox alchemyCheckBox;
-		private JComboBox inventoryItemsComboxBox;
+		private JSeparator topMiddleSeparator;
+		private JLabel monsterLabel;
+		private JScrollPane monsterScrollPane;
+		private JList monsterList;
+		private JSeparator bottomMiddleSeparator;
+		private JLabel alchemySpellLabel;
+		private JCheckBox noAlchemyCheckBox;
+		private JCheckBox lowAlchemyCheckBox;
+		private JCheckBox highAlchemyCheckBox;
+		private JLabel inventoryLabel;
+		private JComboBox inventoryComboBox;
 		private JSeparator bottomSeparator;
 		private JButton startButton;
 	}
