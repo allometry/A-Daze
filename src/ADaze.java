@@ -37,15 +37,16 @@ import javax.swing.event.ChangeListener;
 
 import com.quirlion.script.Constants;
 import com.quirlion.script.Script;
+import com.quirlion.script.types.Camera;
 import com.quirlion.script.types.Interface;
 import com.quirlion.script.types.InventoryItem;
 import com.quirlion.script.types.Magic;
 import com.quirlion.script.types.NPC;
 
 public class ADaze extends Script {
-	private boolean isUsingAlchemy = false, isUsingHighAlchemy = false, isUsingLowAlchemy = false, isCameraRotating = false;
+	private boolean isUsingAlchemy = false, isUsingHighAlchemy = false, isUsingLowAlchemy = false;
 	private int alchemyCasts = 0, curseCasts = 0, curseNPCID = 0, spellInterfaceID = 0, startingMagicLevel = 0, startingMagicXP = 0;
-	private long startTime = 0, timeout = 0;
+	private long startTime = 0, timeout = 0, nextAntiban = 0;
 	
 	private InventoryItem alchemyInventoryItem;
 	private Image asteriskImage, cursorImage, sumImage, timeImage, wandImage;
@@ -148,11 +149,22 @@ public class ADaze extends Script {
 		aDazeGUI = null;
 		
 		startTime = System.currentTimeMillis();
+		nextAntiban = System.currentTimeMillis();
 	}
 	
 	@Override
 	public int loop() {
-		if(isCameraRotating) return 1;
+		if(random(7, 343) % 7 == 0 && System.currentTimeMillis() >= nextAntiban) {
+			if(random(1,10) % 2 == 0) {
+				cam.spinCamera(random(1,360), Camera.LEFT);
+			} else {
+				cam.spinCamera(random(1,360), Camera.RIGHT);
+			}
+			
+			nextAntiban = System.currentTimeMillis() + random(300000, 600000);
+			
+			return random(1000, 2000);
+		}
 		
 		try {
 			if(curseNPC == null) {
@@ -203,18 +215,13 @@ public class ADaze extends Script {
 							while(magicXP == skills.getCurrentSkillXP(Constants.STAT_MAGIC) && System.currentTimeMillis() < timeout) wait(1);
 							if(magicXP != skills.getCurrentSkillXP(Constants.STAT_MAGIC)) alchemyCasts++;
 						}
-					} else {
-						isUsingHighAlchemy = false;
-						isUsingLowAlchemy = false;
 					}
 				}
 			}
 		} catch(Exception e) {
-			logStackTrace(e);
-			stopScript();
+			
 		}
-		
-		return 1;
+		return random(1000, 1500);
 	}
 	
 	@Override
